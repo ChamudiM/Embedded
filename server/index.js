@@ -6,13 +6,15 @@ const cors = require("cors");
 
 app.use(cors()); //middleware
 
-const server = http.createServer(app)
+// Use the correct middleware to parse incoming text
+app.use(express.text()); 
 
+const server = http.createServer(app)
 
 //instanciate a new socket.io class
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173",
+        origin: "*",
         methods: ["GET", "POST"],
     },
 });
@@ -29,7 +31,24 @@ io.on("connection", (socket) =>{
     });
 });
 
-server.listen(3001, () => {
-    console.log("Server is running on port 3001");
+// Handle motion detection event from ESP32
+app.post("/connection", (req, res) => {
+    io.emit("connectionDetected", { message: "Connection positive", address: req.body });
+    console.log("connection coming from", req.body) 
+    res.send({ address: req.body });
+});
 
+app.post("/motion", (req, res) => {
+    io.emit("motionDetected", { message: "Alert", address: req.body });
+    console.log("Unidentified object detected from", req.body)
+    res.send({ address: req.body });
+})
+
+app.get("/test", (req, res) => {
+    console.log("test")
+    res.send({ status: "received" });
+})
+
+server.listen(3001, "0.0.0.0", () => {
+    console.log("Server is running on port 3001");
 });
