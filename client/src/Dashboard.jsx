@@ -14,7 +14,7 @@ const Dashboard = () => {
     const [connectedDevices, setConnectedDevices] = useState([]) // devices that are connected
     const [triggeredDevices, setTriggeredDevices] = useState([]); // devices that have triggered an alarm
 
-    const [matrix, setMatrix] = useState(Array(16).fill(null).map(() => Array(16).fill('empty')));
+    const [matrix, setMatrix] = useState(Array(4).fill(null).map(() => Array(4).fill('empty')));
 
     // Update matrix whenever devices change
     useEffect(() => { 
@@ -89,20 +89,20 @@ const Dashboard = () => {
     function updateMatrix(devices, connectedDevices, triggeredDevices) {
         console.log("...updating matrix")
         // Create a new matrix copy to avoid mutation
-        let newMatrix = Array(16).fill(null).map(() => Array(16).fill('empty')); // Reset matrix to 'empty'
+        let newMatrix = Array(4).fill(null).map(() => Array(4).fill('empty')); // Reset matrix to 'empty'
         
         // Update matrix based on device addresses
         devices.forEach(device => {
-            const row = Math.floor(device.address / 16);
-            const col = device.address % 16;
+            const row = Math.floor(device.address / 4);
+            const col = device.address % 4;
             newMatrix[row][col] = 'placed';
         });
 
         if(connectedDevices.length > 0) {
             connectedDevices.forEach(device => {
-                const row = Math.floor(device / 16);
+                const row = Math.floor(device / 4);
                 console.log(row)
-                const col = device % 16;
+                const col = device % 4;
                 console.log(col)
                 newMatrix[row][col] = 'connected';
             })
@@ -110,8 +110,8 @@ const Dashboard = () => {
 
         if(triggeredDevices.length > 0) {
             triggeredDevices.forEach(device => {
-                const row = Math.floor(device / 16);
-                const col = device % 16;
+                const row = Math.floor(device / 4);
+                const col = device % 4;
                 newMatrix[row][col] = 'alarm';
             })
         }
@@ -157,7 +157,7 @@ const Map = ({matrix}) => {
     };
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 30px)', gridGap: '2px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 30px)', gridGap: '2px' }}>
             {matrix.map((row, rowIndex) =>
                 row.map((status, colIndex) => (
                     <div key={`${rowIndex}-${colIndex}`} style={{ width: '30px', height: '30px', border: '1px solid black', position: 'relative' }}>
