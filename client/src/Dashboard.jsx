@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import io from 'socket.io-client'
 
-const socket = io('http://192.168.171.65:3001');
+const socket = io('http://192.168.212.65:3001');
 
 function convertToDecimal(binary) {  // util function
     return parseInt(binary, 2);
@@ -12,14 +12,16 @@ const Dashboard = () => {
 
     const [devices, setDevices] = useState([]); // placed devices
     const [connectedDevices, setConnectedDevices] = useState([]) // devices that are connected
+    const [triggeredDevices, setTriggeredDevices] = useState([]); // devices that have triggered an alarm
 
     const [matrix, setMatrix] = useState(Array(16).fill(null).map(() => Array(16).fill('empty')));
 
     // Update matrix whenever devices change
     useEffect(() => { 
-        updateMatrix(devices, connectedDevices);
-    }, [devices, connectedDevices]);
+        updateMatrix(devices, connectedDevices, triggeredDevices);
+    }, [devices, connectedDevices, triggeredDevices]);
 
+    // Listen for connection detection events from ESP32
     useEffect(() => {
         socket.on("connectionDetected", (data) => {
             console.log(data.message, "in", data.address);
@@ -33,16 +35,59 @@ const Dashboard = () => {
         };
     }, [socket]);
 
+    // Listen for connection finish events from ESP32
     useEffect(() => {
-        const interval = setInterval(() => {
-            setConnectedDevices([]); // Clears the connected devices every 20 seconds
-        }, 20000); // 60 seconds
-    
-        return () => clearInterval(interval); // Cleanup interval on component unmount
-    }, []);
+        socket.on("connectionFinished", (data) => {
+            console.log(data.message, "in", data.address); 
+            const address = convertToDecimal(data.address);
 
-    function updateMatrix(devices, connectedDevices) {
-        console.log("connected devices: ", connectedDevices)
+            setConnectedDevices(prevConnected => prevConnected.filter(device => device !== address));
+        });
+    
+        return () => {
+            socket.off("connectionFinished"); // Cleanup listener to prevent memory leaks
+        };
+    }, [socket]);
+
+    // Listen for motion detection events from ESP32
+    useEffect(() => {
+        socket.on("motionDetected", (data) => {
+            console.log(data.message, "in", data.address); 
+            const address = convertToDecimal(data.address);
+
+            setTriggeredDevices(prevTriggered => [...prevTriggered, address]);
+        });
+    
+        return () => {
+            socket.off("motionDetected"); // Cleanup listener to prevent memory leaks
+        };
+    }, [socket]);
+
+    // Listen for motion finish events from ESP32
+    useEffect(() => {
+        socket.on("motionFinished", (data) => {
+            console.log(data.message, "in", data.address); 
+            const address = convertToDecimal(data.address);
+
+            setTriggeredDevices(prevConnected => prevConnected.filter(device => device !== address));
+        });
+    
+        return () => {
+            socket.off("motionFinished"); // Cleanup listener to prevent memory leaks
+        };
+    }, [socket]);
+
+    // useEffect(() => {
+    //     const interval = setInterval(() => {
+    //         setConnectedDevices([]); // Clears the connected devices every 20 seconds
+    //     }, 20000); // 20 seconds
+    
+    //     return () => clearInterval(interval); // Cleanup interval on component unmount
+    // }, []);
+
+
+    function updateMatrix(devices, connectedDevices, triggeredDevices) {
+        console.log("...updating matrix")
         // Create a new matrix copy to avoid mutation
         let newMatrix = Array(16).fill(null).map(() => Array(16).fill('empty')); // Reset matrix to 'empty'
         
@@ -60,6 +105,14 @@ const Dashboard = () => {
                 const col = device % 16;
                 console.log(col)
                 newMatrix[row][col] = 'connected';
+            })
+        }
+
+        if(triggeredDevices.length > 0) {
+            triggeredDevices.forEach(device => {
+                const row = Math.floor(device / 16);
+                const col = device % 16;
+                newMatrix[row][col] = 'alarm';
             })
         }
 
