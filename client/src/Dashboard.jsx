@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import io from 'socket.io-client'
 
-const socket = io('http://192.168.212.65:3001');
+const socket = io('http://localhost:3001');
 
 function convertToDecimal(binary) {  // util function
     return parseInt(binary, 2);
@@ -45,6 +45,7 @@ const Dashboard = () => {
         });
     
         return () => {
+            <div className="h-screen bg-green-500 flex items-center justify-center"></div>
             socket.off("connectionFinished"); // Cleanup listener to prevent memory leaks
         };
     }, [socket]);
@@ -122,18 +123,38 @@ const Dashboard = () => {
 
 
     return (
-        <div className='flex flex-col h-screen justify-between items-center'>
-            <header>
-                <h1 className='text-4xl'>Wattata pannoth ubt huknwa</h1>
-            </header>
-            <main>
-                <Map matrix={matrix}/>
-                <DeviceManager devices={devices} setDevices={setDevices}/>
-            </main>
-            <footer>
-                <p>Thank you for visiting</p>
-            </footer>
-        </div>
+<div className="h-screen  flex flex-col bg-gray-200 justify-between items-center">
+  <header className="my-8">
+    <h1 className="text-4xl font-bold text-gray-900">Smart Human & Animal Detection System</h1>
+  </header>
+
+  <main className="flex flex-col items-center w-full">
+    {/* Map Section with Background Image */}
+    <div 
+      className="w-[300px] h-[300px] flex justify-center items-center bg-cover bg-center bg-no-repeat rounded-lg shadow-lg" 
+      style={{ backgroundImage: "url('/bg.jpeg')" }} // Update with your actual path
+    >
+      <Map matrix={matrix} />
+    </div>
+
+    {/* Device Manager Section */}
+    <DeviceManager devices={devices} setDevices={setDevices} />
+  </main>
+
+  {/* Footer Section */}
+  <footer className="w-full bg-gray-900 text-white py-6 mt-10">
+    <div className="container mx-auto flex flex-col md:flex-row justify-between items-center px-6">
+      <p className="text-sm">&copy; {new Date().getFullYear()} Smart Detection System. All rights reserved.</p>
+      <div className="flex space-x-6 mt-3 md:mt-0">
+        <a href="#" className="hover:text-amber-500 transition duration-300">Privacy Policy</a>
+        <a href="#" className="hover:text-amber-500 transition duration-300">Terms of Service</a>
+        <a href="#" className="hover:text-amber-500 transition duration-300">Contact Us</a>
+      </div>
+    </div>
+  </footer>
+</div>
+
+         
     )
 }
 
@@ -157,10 +178,13 @@ const Map = ({matrix}) => {
     };
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 30px)', gridGap: '2px' }}>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 60px)', gridGap: '2px' }}>
             {matrix.map((row, rowIndex) =>
                 row.map((status, colIndex) => (
-                    <div key={`${rowIndex}-${colIndex}`} style={{ width: '30px', height: '30px', border: '1px solid black', position: 'relative' }}>
+                    <div key={`${rowIndex}-${colIndex}`} style={{ width: '60px', height: '60px', border: '3px solid ', position: 'relative' }} className='rounded-lg' >
+                            <div className="absolute inset-0 bg-white opacity-70 rounded-lg"></div>
+
                         <div style={{
                             width: '10px',
                             height: '10px',
@@ -212,8 +236,8 @@ const DeviceManager = ({devices, setDevices}) => {
     }
 
     return (
-        <div className='my-4'>
-            <div className='flex gap-4 items-center'>
+        <div className='my-4 flex flex-col items-center'>
+            <div className='flex gap-4 items-center bg-gray-300 p-4 rounded-lg shadow-md'>
                 <input 
                     id="new-device" 
                     value={value} 
@@ -221,11 +245,11 @@ const DeviceManager = ({devices, setDevices}) => {
                     type="text" 
                     maxLength="8" 
                     placeholder="Enter address in binary" 
-                    className='border-2 py-1 px-2'
-                />
+                    className="border-2 border-gray-500 focus:border-amber-500 focus:ring-2 focus:ring-amber-300 transition-all duration-300 outline-none py-2 px-3 rounded-lg w-64 text-gray-800"
+                    />
                 <button 
                     type='button' 
-                    className='border-1 py-1 px-2 bg-amber-600' 
+                    className="py-2 px-4 bg-gray-900 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-md transition-all duration-300"
                     onClick={() => addDevice()}
                 >
                     Add
