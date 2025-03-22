@@ -31,6 +31,8 @@ io.on("connection", (socket) =>{
     });
 });
 
+
+
 // Handle connection detection event from ESP32
 app.post("/connection", (req, res) => {
     io.emit("connectionDetected", { message: "Connection positive", address: req.body });

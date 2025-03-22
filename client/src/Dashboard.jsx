@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import io from 'socket.io-client'
 
-const socket = io('http://localhost:3001');
+const socket = io('http://192.168.169.65:3001');
 
 function convertToDecimal(binary) {  // util function
-    return parseInt(binary, 2);
+    return parseInt(binary, 10);
 }
 
 // Main Component
@@ -208,28 +208,32 @@ const DeviceManager = ({devices, setDevices}) => {
     const [value, setValue] = useState('');
 
     function addDevice() {
-        if (value.length !== 8) {
-            alert('Binary code must be 8 characters long');
-            return;
-        }
+        // if (value.length !== 8) {
+        //     alert('Binary code must be 8 characters long');
+        //     return;
+        // }
 
-        if (devices.length >= 256) {
+        if (devices.length >= 16) {
             alert('Maximum number of devices reached');
             return;
         }
 
-        const addressInDecimal = convertToDecimal(value); // Convert binary address to decimal value
+        // const addressInDecimal = convertToDecimal(value); // Convert binary address to decimal value
+
+        const addressInDecimal = value;
         if (devices.find(device => device.address === addressInDecimal)) {
             alert('Device already exists');
             return;
         }
-        if (addressInDecimal > 255) {
+        if (addressInDecimal > 15) {
             alert('Invalid binary code');
             return;
         }
 
         // Create a new array with the new device added
         const newDevices = [...devices, { address: addressInDecimal, status: 'placed' }];
+
+        fetch(`http://192.168.169.79:80/activate?device=${addressInDecimal}`);
             
         // Update the devices state with the new array
         setDevices(newDevices);
