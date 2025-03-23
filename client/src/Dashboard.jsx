@@ -1,264 +1,217 @@
-import React, { useEffect, useState } from 'react'
-import io from 'socket.io-client'
+import React, { useEffect, useState, useRef } from 'react';
+import io from 'socket.io-client';
+import { PlusCircle, Trash2 } from "lucide-react";
+import MyDraggableComponent from './Moveble';
 
 const socket = io('http://192.168.169.65:3001');
 
-function convertToDecimal(binary) {  // util function
+function convertToDecimal(binary) {  
     return parseInt(binary, 10);
 }
 
-// Main Component
 const Dashboard = () => {
+    const [deviceAddress, setDeviceAddress] = useState(""); 
+    const [devices, setDevices] = useState([]); 
+    const [connectedDevices, setConnectedDevices] = useState([]); 
+    const [triggeredDevices, setTriggeredDevices] = useState([]);
 
-    const [devices, setDevices] = useState([]); // placed devices
-    const [connectedDevices, setConnectedDevices] = useState([]) // devices that are connected
-    const [triggeredDevices, setTriggeredDevices] = useState([]); // devices that have triggered an alarm
+    const containerRef = useRef(null);
+    const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
-    const [matrix, setMatrix] = useState(Array(4).fill(null).map(() => Array(4).fill('empty')));
+    // Load devices from local storage when the component mounts
+    useEffect(() => {
+        const savedDevices = localStorage.getItem("devices");
+        if (savedDevices) {
+            setDevices(JSON.parse(savedDevices));
+        }
+    }, []);
 
-    // Update matrix whenever devices change
+    // Save devices to local storage whenever they change
+    useEffect(() => {
+        if (devices.length > 0) {
+            localStorage.setItem("devices", JSON.stringify(devices));
+        }
+    }, [devices]);
+
+    useEffect(() => {
+        if (containerRef.current) {
+            const updateSize = () => {
+                setContainerSize({
+                    width: containerRef.current.clientWidth,
+                    height: containerRef.current.clientHeight
+                });
+            };
+            
+            updateSize();
+            const resizeObserver = new ResizeObserver(updateSize);
+            resizeObserver.observe(containerRef.current);
+            
+            return () => resizeObserver.disconnect();
+        }
+    }, [devices]);
+
     useEffect(() => { 
-        updateMatrix(devices, connectedDevices, triggeredDevices);
-    }, [devices, connectedDevices, triggeredDevices]);
+        updateDeviceStatuses();
+    }, [connectedDevices, triggeredDevices]);
 
-    // Listen for connection detection events from ESP32
     useEffect(() => {
         socket.on("connectionDetected", (data) => {
-            console.log(data.message, "in", data.address);
             const address = convertToDecimal(data.address);
-    
-            setConnectedDevices(prevConnected => [...prevConnected, address]); 
+            setConnectedDevices(prev => [...prev, address]); 
         });
-    
-        return () => {
-            socket.off("connectionDetected"); // Cleanup listener to prevent memory leaks
-        };
-    }, [socket]);
+        return () => socket.off("connectionDetected");
+    }, []);
 
-    // Listen for connection finish events from ESP32
-    useEffect(() => {
-        socket.on("connectionFinished", (data) => {
-            console.log(data.message, "in", data.address); 
-            const address = convertToDecimal(data.address);
-
-            setConnectedDevices(prevConnected => prevConnected.filter(device => device !== address));
-        });
-    
-        return () => {
-            <div className="h-screen bg-green-500 flex items-center justify-center"></div>
-            socket.off("connectionFinished"); // Cleanup listener to prevent memory leaks
-        };
-    }, [socket]);
-
-    // Listen for motion detection events from ESP32
     useEffect(() => {
         socket.on("motionDetected", (data) => {
-            console.log(data.message, "in", data.address); 
             const address = convertToDecimal(data.address);
-
-            setTriggeredDevices(prevTriggered => [...prevTriggered, address]);
+            setTriggeredDevices(prev => [...prev, address]);
         });
-    
-        return () => {
-            socket.off("motionDetected"); // Cleanup listener to prevent memory leaks
-        };
-    }, [socket]);
+        return () => socket.off("motionDetected");
+    }, []);
 
-    // Listen for motion finish events from ESP32
-    useEffect(() => {
-        socket.on("motionFinished", (data) => {
-            console.log(data.message, "in", data.address); 
-            const address = convertToDecimal(data.address);
-
-            setTriggeredDevices(prevConnected => prevConnected.filter(device => device !== address));
-        });
-    
-        return () => {
-            socket.off("motionFinished"); // Cleanup listener to prevent memory leaks
-        };
-    }, [socket]);
-
-    // useEffect(() => {
-    //     const interval = setInterval(() => {
-    //         setConnectedDevices([]); // Clears the connected devices every 20 seconds
-    //     }, 20000); // 20 seconds
-    
-    //     return () => clearInterval(interval); // Cleanup interval on component unmount
-    // }, []);
-
-
-    function updateMatrix(devices, connectedDevices, triggeredDevices) {
-        console.log("...updating matrix")
-        // Create a new matrix copy to avoid mutation
-        let newMatrix = Array(4).fill(null).map(() => Array(4).fill('empty')); // Reset matrix to 'empty'
-        
-        // Update matrix based on device addresses
-        devices.forEach(device => {
-            const row = Math.floor(device.address / 4);
-            const col = device.address % 4;
-            newMatrix[row][col] = 'placed';
-        });
-
-        if(connectedDevices.length > 0) {
-            connectedDevices.forEach(device => {
-                const row = Math.floor(device / 4);
-                console.log(row)
-                const col = device % 4;
-                console.log(col)
-                newMatrix[row][col] = 'connected';
+    const updateDeviceStatuses = () => {
+        setDevices(prevDevices =>
+            prevDevices.map(device => {
+                if (triggeredDevices.includes(device.address)) return { ...device, status: "triggered" };
+                if (connectedDevices.includes(device.address)) return { ...device, status: "active" };
+                return { ...device, status: "lost" };
             })
-        }
+        );
+    };
 
-        if(triggeredDevices.length > 0) {
-            triggeredDevices.forEach(device => {
-                const row = Math.floor(device / 4);
-                const col = device % 4;
-                newMatrix[row][col] = 'alarm';
-            })
-        }
+    const addDevice = () => {
+        const address = parseInt(deviceAddress);
+        if (!isNaN(address) && address >= 0 && address <= 15) {
+            if (devices.some(device => device.address === address)) {
+                alert("Device with this address already exists!");
+                return;
+            }
 
-        // Update state with new matrix
-        setMatrix(newMatrix);
-    }
-
-
-    return (
-<div className="h-screen  flex flex-col bg-gray-200 justify-between items-center">
-  <header className="my-8">
-    <h1 className="text-4xl font-bold text-gray-900">Smart Human & Animal Detection System</h1>
-  </header>
-
-  <main className="flex flex-col items-center w-full">
-    {/* Map Section with Background Image */}
-    <div 
-      className="w-[300px] h-[300px] flex justify-center items-center bg-cover bg-center bg-no-repeat rounded-lg shadow-lg" 
-      style={{ backgroundImage: "url('/bg.jpeg')" }} // Update with your actual path
-    >
-      <Map matrix={matrix} />
-    </div>
-
-    {/* Device Manager Section */}
-    <DeviceManager devices={devices} setDevices={setDevices} />
-  </main>
-
-  {/* Footer Section */}
-  <footer className="w-full bg-gray-900 text-white py-6 mt-10">
-    <div className="container mx-auto flex flex-col md:flex-row justify-between items-center px-6">
-      <p className="text-sm">&copy; {new Date().getFullYear()} Smart Detection System. All rights reserved.</p>
-      <div className="flex space-x-6 mt-3 md:mt-0">
-        <a href="#" className="hover:text-amber-500 transition duration-300">Privacy Policy</a>
-        <a href="#" className="hover:text-amber-500 transition duration-300">Terms of Service</a>
-        <a href="#" className="hover:text-amber-500 transition duration-300">Contact Us</a>
-      </div>
-    </div>
-  </footer>
-</div>
-
-         
-    )
-}
-
-export default Dashboard
-
-// Map Component
-const Map = ({matrix}) => {
-
-    const getColor = (status) => {
-        switch (status) {
-            case 'placed':
-                return 'gray'
-            case 'connected':
-                return 'green';
-            case 'alarm':
-                return 'red';
-            case 'empty':
-            default:
-                return 'transparent';
+            const newDevice = {
+                name: `Device ${address}`,
+                address: address,
+                status: "lost",
+                x: Math.random() * 400,
+                y: Math.random() * 400
+            };
+            const updatedDevices = [...devices, newDevice];
+            setDevices(updatedDevices);  // Update state
+            localStorage.setItem("devices", JSON.stringify(updatedDevices));  // Update localStorage
+            setDeviceAddress("");
+        } else {
+            alert("Enter a valid address (0-15).");
         }
     };
 
-    return (
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 60px)', gridGap: '2px' }}>
-            {matrix.map((row, rowIndex) =>
-                row.map((status, colIndex) => (
-                    <div key={`${rowIndex}-${colIndex}`} style={{ width: '60px', height: '60px', border: '3px solid ', position: 'relative' }} className='rounded-lg' >
-                            <div className="absolute inset-0 bg-white opacity-70 rounded-lg"></div>
+    const removeDevice = (address) => {
+        const updatedDevices = devices.filter(device => device.address !== address);
+        setDevices(updatedDevices);  // Update state
+        localStorage.setItem("devices", JSON.stringify(updatedDevices));  // Update localStorage
+    };
 
-                        <div style={{
-                            width: '10px',
-                            height: '10px',
-                            borderRadius: '50%',
-                            backgroundColor: getColor(status),
-                            position: 'absolute',
-                            top: '50%',
-                            left: '50%',
-                            transform: 'translate(-50%, -50%)'
-                        }}></div>
+    const handleDrag = (e, data, deviceIndex) => {
+        setDevices(prevDevices => {
+            const newDevices = [...prevDevices];
+            newDevices[deviceIndex] = { ...newDevices[deviceIndex], x: data.x, y: data.y };
+            return newDevices;
+        });
+    };
+
+    return (
+        <div className="h-screen flex flex-col bg-[#151f31] justify-between items-center">
+            <header className="w-full bg-gray-900 shadow-lg">
+                <div className="container mx-auto py-0 px-6 flex justify-center items-center cursor-pointer">
+                    <h1 className=" p-4 text-xl font-semibold text-white tracking-wide uppercase transition-transform duration-600 hover:scale-104">
+                        SMART HUMAN & ANIMAL DETECTION SYSTEM
+                    </h1>
+                </div>
+            </header>
+
+            <main className="flex h-full">
+                {/* Left Section - Add Devices */}
+                <div className="w-1/3 flex flex-col items-center bg-[#151f31] p-16 text-white">
+                    <h2 className="text-2xl mb-8">Add Your Device</h2>
+                    <div className="flex space-x-4 mb-6">
+                        <input
+                            type="number"
+                            placeholder="Enter Address"
+                            className="w-34 px-4 py-2 rounded-lg text-white border border-gray-300 focus:border-blue-500 focus:outline-none"
+                            value={deviceAddress}
+                            onChange={(e) => setDeviceAddress(e.target.value)}
+                        />
+                        <button 
+                            onClick={addDevice} 
+                            className="w-36 flex justify-center items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md transition-all cursor-pointer"
+                        >
+                            <PlusCircle size={20} className="mr-2" /> Add Device
+                        </button>
                     </div>
-                ))
-            )}
+
+                    {/* Device List */}
+                    <div className="w-full mt-4">
+                        <h3 className="text-lg mb-2">Device List:</h3>
+                        <ul className="bg-gray-800 p-4 rounded-lg w-full text-white">
+                            {devices.length > 0 ? (
+                                devices.map((device, index) => (
+                                    <li key={index} className="p-2 border-b border-gray-600 flex justify-between items-center">
+                                        <span>{device.name}</span>
+                                        <span className={`px-2 rounded-lg text-white ${device.status === 'lost' ? 'bg-yellow-500' : device.status === 'triggered' ? 'bg-red-600' : 'bg-green-500'}`}>
+                                            {device.status.toUpperCase()}
+                                        </span>
+                                        <button onClick={() => removeDevice(device.address)} className="ml-4 text-gray-400 cursor-pointer hover:text-red-500">
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </li>
+                                ))
+                            ) : (
+                                <li className="text-gray-400 text-center py-1">
+                                    No devices added yet.
+                                </li>
+                            )}
+                        </ul>
+                    </div>
+                </div>
+
+                {/* Right Section - Map */}
+                <div className="w-2/3 relative bg-[#151f31]" ref={containerRef}>
+                    <img
+                        src="/park.jpg" 
+                        alt="Smart Detection" 
+                        className="w-full h-full object-cover"
+                    />
+
+                    {/* Display devices on the image */}
+                    {devices.map((device, index) => (
+                        <MyDraggableComponent 
+                            key={index}
+                            sensorNumber={device.address}
+                            status={device.status}
+                            position={{ x: device.x, y: device.y }}
+                            onDrag={(e, data) => handleDrag(e, data, index)}
+                            containerSize={containerSize}
+                        >
+                            <div className={`absolute text-white p-2 rounded-full ${device.status === 'lost' ? 'bg-yellow-500' : device.status === 'triggered' ? 'bg-red-600' : 'bg-green-500'}`}>
+                                {device.name}
+                            </div>
+                        </MyDraggableComponent>
+                    ))}
+                </div>
+            </main>
+            
+            <footer className="w-full bg-gray-900 text-white py-6 shadow-md">
+                <div className="container mx-auto flex flex-col md:flex-row justify-between items-center px-28">
+                    <p className="text-sm">&copy; {new Date().getFullYear()} Smart Detection System. All rights reserved.</p>
+                    <div className="flex space-x-6 mt-2 md:mt-0">
+                        <a href="#" className="text-sm hover:text-orange-500 hover:no-underline">Privacy Policy</a>
+                        <a href="#" className="text-sm hover:text-orange-500 hover:no-underline">Terms of Service</a>
+                        <a href="#" className="text-sm hover:text-orange-500 hover:no-underline">Support</a>
+                    </div>
+                    
+                </div>
+            </footer>
         </div>
     );
-}
+};
 
-// Component to manage addition of Devices
-const DeviceManager = ({devices, setDevices}) => {
-
-    const [value, setValue] = useState('');
-
-    function addDevice() {
-        // if (value.length !== 8) {
-        //     alert('Binary code must be 8 characters long');
-        //     return;
-        // }
-
-        if (devices.length >= 16) {
-            alert('Maximum number of devices reached');
-            return;
-        }
-
-        // const addressInDecimal = convertToDecimal(value); // Convert binary address to decimal value
-
-        const addressInDecimal = value;
-        if (devices.find(device => device.address === addressInDecimal)) {
-            alert('Device already exists');
-            return;
-        }
-        if (addressInDecimal > 15) {
-            alert('Invalid binary code');
-            return;
-        }
-
-        // Create a new array with the new device added
-        const newDevices = [...devices, { address: addressInDecimal, status: 'placed' }];
-
-        fetch(`http://192.168.169.79:80/activate?device=${addressInDecimal}`);
-            
-        // Update the devices state with the new array
-        setDevices(newDevices);
-    }
-
-    return (
-        <div className='my-4 flex flex-col items-center'>
-            <div className='flex gap-4 items-center bg-gray-300 p-4 rounded-lg shadow-md'>
-                <input 
-                    id="new-device" 
-                    value={value} 
-                    onChange={(e) => setValue(e.target.value)} 
-                    type="text" 
-                    maxLength="8" 
-                    placeholder="Enter address in binary" 
-                    className="border-2 border-gray-500 focus:border-amber-500 focus:ring-2 focus:ring-amber-300 transition-all duration-300 outline-none py-2 px-3 rounded-lg w-64 text-gray-800"
-                    />
-                <button 
-                    type='button' 
-                    className="py-2 px-4 bg-gray-900 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-md transition-all duration-300"
-                    onClick={() => addDevice()}
-                >
-                    Add
-                </button>
-            </div>
-        </div>
-    )
-}
+export default Dashboard;
