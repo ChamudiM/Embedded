@@ -11,6 +11,7 @@ app.use(express.text());
 
 const server = http.createServer(app)
 
+
 //instanciate a new socket.io class
 const io = new Server(server, {
     cors: {
@@ -62,7 +63,7 @@ app.post("/motion-finish", (req, res) => {
 })
 
 app.get("/test", (req, res) => {
-    console.log("test")
+    console.log("test");
     res.send({ status: "received" });
 })
 

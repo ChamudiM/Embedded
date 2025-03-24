@@ -3,7 +3,9 @@ import io from 'socket.io-client';
 import { PlusCircle, Trash2 } from "lucide-react";
 import MyDraggableComponent from './Moveble';
 
-const socket = io('http://192.168.169.65:3001');
+const serverAddress = "http://192.168.169.79:80";
+
+const socket = io('http://192.168.43.115:3001');
 
 function convertToDecimal(binary) {  
     return parseInt(binary, 10);
@@ -12,8 +14,6 @@ function convertToDecimal(binary) {
 const Dashboard = () => {
     const [deviceAddress, setDeviceAddress] = useState(""); 
     const [devices, setDevices] = useState([]); 
-    const [connectedDevices, setConnectedDevices] = useState([]); 
-    const [triggeredDevices, setTriggeredDevices] = useState([]);
 
     const containerRef = useRef(null);
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -33,6 +33,7 @@ const Dashboard = () => {
         }
     }, [devices]);
 
+    // Update container size for draggable elements
     useEffect(() => {
         if (containerRef.current) {
             const updateSize = () => {
@@ -50,36 +51,66 @@ const Dashboard = () => {
         }
     }, [devices]);
 
-    useEffect(() => { 
-        updateDeviceStatuses();
-    }, [connectedDevices, triggeredDevices]);
-
     useEffect(() => {
         socket.on("connectionDetected", (data) => {
             const address = convertToDecimal(data.address);
-            setConnectedDevices(prev => [...prev, address]); 
+            console.log("Connection Detected:", address);
+            setDevices(prevDevices =>
+                prevDevices.map(device =>
+                    device.address === address && device.status !== "trigger"
+                        ? { ...device, status: "active" }
+                        : device
+                )
+            );
         });
+    
         return () => socket.off("connectionDetected");
+    }, []);
+    
+
+    useEffect(() => {
+        socket.on("connectionFinished", (data) => {
+            const address = convertToDecimal(data.address);
+            console.log("Connection Finished:", address);
+            setDevices(prevDevices =>
+                prevDevices.map(device =>
+                    device.address === address ? { ...device, status: "lost" } : device
+                )
+            );
+        });
+
+        return () => socket.off("connectionFinished");
     }, []);
 
     useEffect(() => {
         socket.on("motionDetected", (data) => {
             const address = convertToDecimal(data.address);
-            setTriggeredDevices(prev => [...prev, address]);
+            console.log("Motion Detected:", address);
+            setDevices(prevDevices =>
+                prevDevices.map(device =>
+                    device.address === address ? { ...device, status: "trigger" } : device
+                )
+            );
         });
+
         return () => socket.off("motionDetected");
     }, []);
 
-    const updateDeviceStatuses = () => {
-        setDevices(prevDevices =>
-            prevDevices.map(device => {
-                if (triggeredDevices.includes(device.address)) return { ...device, status: "triggered" };
-                if (connectedDevices.includes(device.address)) return { ...device, status: "active" };
-                return { ...device, status: "lost" };
-            })
-        );
-    };
+    useEffect(() => {
+        socket.on("motionFinished", (data) => {
+            const address = convertToDecimal(data.address);
+            console.log("Motion Finished:", address);
+            setDevices(prevDevices =>
+                prevDevices.map(device =>
+                    device.address === address ? { ...device, status: "active" } : device
+                )
+            );
+        });
 
+        return () => socket.off("motionFinished");
+    }, []);
+
+    // Function to add a new device
     const addDevice = () => {
         const address = parseInt(deviceAddress);
         if (!isNaN(address) && address >= 0 && address <= 15) {
@@ -87,7 +118,7 @@ const Dashboard = () => {
                 alert("Device with this address already exists!");
                 return;
             }
-
+    
             const newDevice = {
                 name: `Device ${address}`,
                 address: address,
@@ -95,20 +126,48 @@ const Dashboard = () => {
                 x: Math.random() * 400,
                 y: Math.random() * 400
             };
-            const updatedDevices = [...devices, newDevice];
-            setDevices(updatedDevices);  // Update state
-            localStorage.setItem("devices", JSON.stringify(updatedDevices));  // Update localStorage
+    
+            // Add the new device to state and localStorage
+            setDevices(prev => [...prev, newDevice]);
+            localStorage.setItem("devices", JSON.stringify([...devices, newDevice]));
+    
+            // Send the device's address to the server
+            fetch(`${serverAddress}/activate?device=${address}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log("Device activated:", data);
+                })
+                .catch(error => {
+                    console.error("Error activating device:", error);
+                });
+    
+            // Clear the input field
             setDeviceAddress("");
         } else {
             alert("Enter a valid address (0-15).");
         }
     };
+    
 
+   // Function to remove a device
     const removeDevice = (address) => {
         const updatedDevices = devices.filter(device => device.address !== address);
-        setDevices(updatedDevices);  // Update state
-        localStorage.setItem("devices", JSON.stringify(updatedDevices));  // Update localStorage
+        
+        // Update the state and localStorage
+        setDevices(updatedDevices);
+        localStorage.setItem("devices", JSON.stringify(updatedDevices));
+
+        // Send the device's address to the server for removal
+        fetch(`${serverAddress}/deactivate?device=${address}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log("Device deactivated:", data);
+            })
+            .catch(error => {
+                console.error("Error deactivating device:", error);
+            });
     };
+
 
     const handleDrag = (e, data, deviceIndex) => {
         setDevices(prevDevices => {
@@ -156,7 +215,7 @@ const Dashboard = () => {
                                 devices.map((device, index) => (
                                     <li key={index} className="p-2 border-b border-gray-600 flex justify-between items-center">
                                         <span>{device.name}</span>
-                                        <span className={`px-2 rounded-lg text-white ${device.status === 'lost' ? 'bg-yellow-500' : device.status === 'triggered' ? 'bg-red-600' : 'bg-green-500'}`}>
+                                        <span className={`px-2 rounded-lg text-white ${device.status === 'lost' ? 'bg-yellow-500' : device.status === 'trigger' ? 'bg-red-600' : 'bg-green-500'}`}>
                                             {device.status.toUpperCase()}
                                         </span>
                                         <button onClick={() => removeDevice(device.address)} className="ml-4 text-gray-400 cursor-pointer hover:text-red-500">

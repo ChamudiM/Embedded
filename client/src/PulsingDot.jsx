@@ -8,9 +8,9 @@ const PulsingDot = ({status}) => {
         pulseColor = "#39FF14"; // Green for active
         pulseSize = "25px";
         break;
-      case 'triger':
+      case 'trigger':
         pulseColor = "#FF3A2F"; // Red for triger
-        pulseSize = "30px";
+        pulseSize = "25px";
         break;
       case 'lost':
         pulseColor = "#FFC300"; // Yellow for lost
