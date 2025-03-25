@@ -38,13 +38,18 @@ const Dashboard = () => {
         }
     }, []);
     
+    
 
     // Save devices to local storage whenever they change
     useEffect(() => {
-        if (devices.length > 0) {
-            localStorage.setItem("devices", JSON.stringify(devices));
+        const savedDevices = localStorage.getItem("devices");
+        if (savedDevices) {
+            setDevices(JSON.parse(savedDevices));
         }
-    }, [devices]);
+    }, []);
+    
+    
+    
 
     // Update container size for draggable elements
     useEffect(() => {
@@ -144,55 +149,63 @@ const Dashboard = () => {
                 y: Math.random() * 400
             };
     
-            // Add the new device to state and localStorage
-            setDevices(prev => [...prev, newDevice]);
-            localStorage.setItem("devices", JSON.stringify([...devices, newDevice]));
+            // Update state using a function to avoid stale state issues
+            setDevices(prevDevices => {
+                const updatedDevices = [...prevDevices, newDevice];
+                localStorage.setItem("devices", JSON.stringify(updatedDevices));
+                return updatedDevices;
+            });
     
             // Send the device's address to the server
             fetch(`${serverAddress}/activate?device=${address}`)
                 .then(response => response.json())
-                .then(data => {
-                    console.log("Device activated:", data);
-                })
-                .catch(error => {
-                    console.error("Error activating device:", error);
-                });
+                .then(data => console.log("Device activated:", data))
+                .catch(error => console.error("Error activating device:", error));
     
-            // Clear the input field
-            setDeviceAddress("");
+            setDeviceAddress("");  // Clear the input field
         } else {
             alert("Enter a valid address (0-15).");
         }
     };
     
+    
 
    // Function to remove a device
-    const removeDevice = (address) => {
-        const updatedDevices = devices.filter(device => device.address !== address);
-        
-        // Update the state and localStorage
-        setDevices(updatedDevices);
-        localStorage.setItem("devices", JSON.stringify(updatedDevices));
+   const removeDevice = (address) => {
+        setDevices(prevDevices => {
+            let updatedDevices = prevDevices.filter(device => device.address !== address);
+            localStorage.setItem("devices", JSON.stringify(updatedDevices));
+            return updatedDevices;
+        });
 
-        // Send the device's address to the server for removal
+        // Notify the server about device removal
         fetch(`${serverAddress}/deactivate?device=${address}`)
             .then(response => response.json())
-            .then(data => {
-                console.log("Device deactivated:", data);
-            })
-            .catch(error => {
-                console.error("Error deactivating device:", error);
-            });
+            .then(data => console.log("Device deactivated:", data))
+            .catch(error => console.error("Error deactivating device:", error));
     };
+
 
 
     const handleDrag = (e, data, deviceIndex) => {
         setDevices(prevDevices => {
             const newDevices = [...prevDevices];
-            newDevices[deviceIndex] = { ...newDevices[deviceIndex], x: data.x, y: data.y };
+            newDevices[deviceIndex] = { 
+                ...newDevices[deviceIndex], 
+                x: data.x, 
+                y: data.y 
+            };
+    
+            // Save updated positions in localStorage
+            localStorage.setItem("devices", JSON.stringify(newDevices));
+    
             return newDevices;
         });
     };
+    
+    
+    
+    
 
     return (
         <div className="h-screen flex flex-col bg-[#151f31] justify-between items-center">
@@ -229,8 +242,8 @@ const Dashboard = () => {
                         <h3 className="text-lg mb-2">Device List:</h3>
                         <ul className="bg-gray-800 p-4 rounded-lg w-full text-white">
                             {devices.length > 0 ? (
-                                devices.map((device, index) => (
-                                    <li key={index} className="p-2 border-b border-gray-600 flex justify-between items-center">
+                                devices.map((device) => (
+                                    <li key={device.address} className="p-2 border-b border-gray-600 flex justify-between items-center">
                                         <span>{device.name}</span>
                                         <span className={`px-2 rounded-lg text-white ${device.status === 'lost' ? 'bg-yellow-500' : device.status === 'trigger' ? 'bg-red-600' : 'bg-green-500'}`}>
                                             {device.status.toUpperCase()}
@@ -258,20 +271,22 @@ const Dashboard = () => {
                     />
 
                     {/* Display devices on the image */}
-                    {devices.map((device, index) => (
+                    {devices.map((device) => (
                         <MyDraggableComponent 
-                            key={index}
+                            key={`${device.address}-${device.x}-${device.y}`} // Ensure unique key
                             sensorNumber={device.address}
                             status={device.status}
                             position={{ x: device.x, y: device.y }}
-                            onDrag={(e, data) => handleDrag(e, data, index)}
+                            onDrag={(e, data) => handleDrag(e, data, device.address)}
                             containerSize={containerSize}
                         >
-                            <div className={`absolute text-white p-2 rounded-full ${device.status === 'lost' ? 'bg-yellow-500' : device.status === 'triggered' ? 'bg-red-600' : 'bg-green-500'}`}>
+                            <div className={`absolute text-white p-2 rounded-full 
+                                ${device.status === 'lost' ? 'bg-yellow-500' : device.status === 'trigger' ? 'bg-red-600' : 'bg-green-500'}`}>
                                 {device.name}
                             </div>
                         </MyDraggableComponent>
                     ))}
+
                 </div>
             </main>
             
