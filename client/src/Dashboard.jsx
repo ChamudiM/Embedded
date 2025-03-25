@@ -3,7 +3,7 @@ import io from 'socket.io-client';
 import { PlusCircle, Trash2 } from "lucide-react";
 import MyDraggableComponent from './Moveble';
 
-const serverAddress = "http://192.168.169.79:80";
+const serverAddress = "http://192.168.43.95:80";
 
 const socket = io('http://192.168.43.115:3001');
 
@@ -18,13 +18,26 @@ const Dashboard = () => {
     const containerRef = useRef(null);
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
-    // Load devices from local storage when the component mounts
     useEffect(() => {
         const savedDevices = localStorage.getItem("devices");
         if (savedDevices) {
-            setDevices(JSON.parse(savedDevices));
+            const parsedDevices = JSON.parse(savedDevices);
+            setDevices(parsedDevices);
+    
+            // Send activation signal for each device
+            parsedDevices.forEach(device => {
+                fetch(`${serverAddress}/activate?device=${device.address}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log(`Device ${device.address} reactivated:`, data);
+                    })
+                    .catch(error => {
+                        console.error(`Error reactivating device ${device.address}:`, error);
+                    });
+            });
         }
     }, []);
+    
 
     // Save devices to local storage whenever they change
     useEffect(() => {
@@ -100,15 +113,19 @@ const Dashboard = () => {
         socket.on("motionFinished", (data) => {
             const address = convertToDecimal(data.address);
             console.log("Motion Finished:", address);
+    
             setDevices(prevDevices =>
                 prevDevices.map(device =>
-                    device.address === address ? { ...device, status: "active" } : device
+                    device.address === address
+                        ? { ...device, status: device.status === "lost" ? "lost" : "active" }
+                        : device
                 )
             );
         });
-
+    
         return () => socket.off("motionFinished");
     }, []);
+    
 
     // Function to add a new device
     const addDevice = () => {
